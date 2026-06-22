@@ -1,0 +1,128 @@
+name: Deploy Simple Isotonic Scheduler
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'Deployment target (DEV or PROD)'
+        required: true
+        default: DEV
+        type: choice
+        options:
+          - DEV
+          - PROD
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    environment: ${{ github.event.inputs.target || 'DEV' }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up K8s configuration
+        run: |
+          mkdir -p ~/.kube
+          echo "${{ secrets.KUBECONFIG }}" > ~/.kube/config
+        env:
+          KUBECONFIG: ${{ secrets.KUBECONFIG }}
+
+      - name: Set up pip configuration
+        run: |
+          mkdir -p .pip
+          echo "[global]" > .pip/pip.conf
+          echo "index-url = https://pypi.org/simple" >> .pip/pip.conf
+          echo "extra-index-url = http://192.168.1.104:30000/simple" >> .pip/pip.conf
+          echo "trusted-host = 192.168.1.104" >> .pip/pip.conf
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.22.0'
+
+      - name: Build simple isotonic scheduler image
+        run: docker build -t 192.168.1.104:30002/simple-isotonic-scheduler:${{ github.sha }} .
+
+      - name: Push Docker image to registry
+        run: docker push 192.168.1.104:30002/simple-isotonic-scheduler:${{ github.sha }}
+
+      - name: Verify database-credentials secret
+        run: kubectl get secret database-credentials -o yaml
+
+      - name: Deploy simple isotonic scheduler ConfigMap
+        run: kubectl apply -f k8s/simple-isotonic-configmap.yaml
+
+      - name: Deploy RBAC for job creation
+        run: |
+          cat <<EOF | kubectl apply -f -
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: Role
+          metadata:
+            name: job-creator
+            namespace: default
+          rules:
+          - apiGroups: ["batch"]
+            resources: ["jobs"]
+            verbs: ["create", "get", "list", "watch", "patch", "update", "delete"]
+          - apiGroups: [""]
+            resources: ["pods"]
+            verbs: ["get", "list", "watch"]
+          ---
+          apiVersion: rbac.authorization.k8s.io/v1
+          kind: RoleBinding
+          metadata:
+            name: job-creator-binding
+            namespace: default
+          subjects:
+          - kind: ServiceAccount
+            name: default
+            namespace: default
+          roleRef:
+            kind: Role
+            name: job-creator
+            apiGroup: rbac.authorization.k8s.io
+          EOF
+
+      - name: Clean up simple isotonic jobs and pods
+        run: |
+          echo "Cleaning up simple-isotonic-* jobs..."
+          kubectl get jobs | grep -iE '^simple-isotonic-' | awk '{print $1}' \
+            | xargs -P 5000 -I {} kubectl delete job {} --grace-period=0 --force \
+            || echo "No simple isotonic jobs to delete"
+          echo "Cleaning up simple-isotonic-predict pods..."
+          kubectl get pods | grep -iE 'simple-isotonic-predict.*(error|completed|terminating|pending|unknown|running)' \
+            | awk '{print $1}' \
+            | xargs -P 50000 -I {} kubectl delete pod {} --grace-period=0 --force \
+            || echo "No simple isotonic pods to delete"
+
+      - name: Deploy initial-fetch CronJob
+        run: kubectl apply -f k8s/simple-isotonic-cronjob-initial-fetch.yaml
+
+      - name: Patch initial-fetch CronJob image & GIT_COMMIT
+        run: |
+          kubectl set image cronjob/simple-isotonic-cronjob-initial-fetch \
+            simple-isotonic-initial-fetch=192.168.1.104:30002/simple-isotonic-scheduler:${{ github.sha }}
+          kubectl set env cronjob/simple-isotonic-cronjob-initial-fetch \
+            GIT_COMMIT=${{ github.sha }} \
+            SELF_IMAGE=192.168.1.104:30002/simple-isotonic-scheduler:${{ github.sha }}
+
+      - name: Deploy simple isotonic scheduler Deployment
+        run: kubectl apply -f k8s/simple-isotonic-deployment.yaml
+
+      - name: Patch simple isotonic scheduler Deployment image & GIT_COMMIT
+        run: |
+          kubectl set image deployment/simple-isotonic-scheduler \
+            simple-isotonic-scheduler=192.168.1.104:30002/simple-isotonic-scheduler:${{ github.sha }}
+          kubectl set env deployment/simple-isotonic-scheduler \
+            GIT_COMMIT=${{ github.sha }} \
+            SELF_IMAGE=192.168.1.104:30002/simple-isotonic-scheduler:${{ github.sha }}
+
+      - name: Verify Deployment rollout
+        run: kubectl rollout status deployment/simple-isotonic-scheduler
+
+      - name: Verify CronJob deployment
+        run: |
+          kubectl get cronjob simple-isotonic-cronjob-initial-fetch

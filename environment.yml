@@ -1,0 +1,36 @@
+name: simple-isotonic
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.13,<3.14
+  - cython
+  - numpy>=2.2
+  - scipy
+  - scikit-learn
+  - matplotlib
+  - pytest>=6.2.5
+  - pip
+  - setuptools
+  - xlrd
+  - pytz
+  - pandas
+  - django>5.0,<6.0
+  - pip:
+      - soapfish2
+      - requests
+      - pytest-cov==2.10.1
+      - pylint==2.6.0
+      - threadpoolctl
+      - CythonGSL
+      - django-cities-light
+      - psycopg2
+      - cpmodels>=1.1.0
+      - bettingrules
+      - fast_methods
+      - favlong>=0.2.5
+      - kubernetes
+      - loggingfancy
+      - utils
+      - ultimora_utils>=1.5.2
+      - ultimora>=1.4.0
+      - staking>=2.0.0

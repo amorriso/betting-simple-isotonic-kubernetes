@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simple-isotonic-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: simple-isotonic-scheduler
+  template:
+    metadata:
+      labels:
+        app: simple-isotonic-scheduler
+    spec:
+      restartPolicy: Always
+      containers:
+      - name: simple-isotonic-scheduler
+        image: 192.168.1.104:30002/simple-isotonic-scheduler:<GIT_COMMIT_PLACEHOLDER>
+        imagePullPolicy: Always
+        env:
+        - name: METHOD
+          valueFrom:
+            configMapKeyRef:
+              name: simple-isotonic-config
+              key: SIMPLE_ISOTONIC_METHOD_SCHEDULE
+        - name: CPU_COUNT
+          valueFrom:
+            configMapKeyRef:
+              name: simple-isotonic-config
+              key: CPU_COUNT
+        - name: JOB_CPU_REQUEST
+          valueFrom:
+            configMapKeyRef:
+              name: simple-isotonic-config
+              key: JOB_CPU_REQUEST
+        - name: SCHEDULER_TICK_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: simple-isotonic-config
+              key: SCHEDULER_TICK_SECONDS
+        - name: JOB_SPAWN_LEAD_SECONDS
+          valueFrom:
+            configMapKeyRef:
+              name: simple-isotonic-config
+              key: JOB_SPAWN_LEAD_SECONDS
+        - name: DATABASE_PORT
+          value: "5432"
+        - name: GIT_COMMIT
+          value: "<GIT_COMMIT_PLACEHOLDER>"
+        - name: SELF_IMAGE
+          value: "192.168.1.104:30002/simple-isotonic-scheduler:<GIT_COMMIT_PLACEHOLDER>"
+        envFrom:
+        - secretRef:
+            name: database-credentials
+        resources:
+          requests:
+            cpu: "1000m"
+            memory: "4096Mi"
+          limits:
+            cpu: "2000m"
+            memory: "8192Mi"

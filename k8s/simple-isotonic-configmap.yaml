@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: simple-isotonic-config
+data:
+  SIMPLE_ISOTONIC_METHOD_INITIAL_FETCH: "simple_isotonic_initial_fetch"
+  SIMPLE_ISOTONIC_METHOD_SCHEDULE: "simple_isotonic_schedule"
+  SIMPLE_ISOTONIC_METHOD_PREDICT: "simple_isotonic_predict_multi"
+  CPU_COUNT: "47"
+  JOB_CPU_REQUEST: "0.05"
+  SCHEDULER_TICK_SECONDS: "30"
+  JOB_SPAWN_LEAD_SECONDS: "720"
